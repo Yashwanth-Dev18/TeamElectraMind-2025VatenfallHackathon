@@ -1,6 +1,8 @@
+import os
 import sys
 import time
 from client import ConsiditionClient
+from dotenv import load_dotenv
 
 def should_move_on_to_next_tick(response):
     return True
@@ -9,15 +11,17 @@ def generate_customer_recommendations(map_obj, current_tick):
     return []
 
 def generate_tick(map_obj, current_tick):
+    
     return {
         "tick": current_tick,
         "customerRecommendations": generate_customer_recommendations(map_obj, current_tick),
     }
 
 def main():
-    api_key = "INSERT API KEY HERE"
-    base_url = "INSERT YOUR CHOSEN PORT HERE"
-    map_name = "INSERT MAP NAME HERE"
+    load_dotenv
+    api_key = os.getenv("API_KEY")
+    base_url = "http://localhost:8080"
+    map_name = "Turbohill"
 
     client = ConsiditionClient(base_url, api_key)
 
