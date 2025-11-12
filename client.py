@@ -6,16 +6,24 @@ class ConsiditionClient:
         self.api_key = api_key
         self.headers = {"x-api-key": self.api_key}
     
-    def post_game(self, data: object):
-        return self.request("POST", "/api/game", json=data)
+    def get_map_config(self, map_name: str):
+        return self.request("GET", "/api/map-config", params={"mapName": map_name})
 
     def get_map(self, map_name: str):
-                return self.request("GET", "/api/map", params={"mapName": map_name})
+        return self.request("GET", "/api/map", params={"mapName": map_name})
+    
+    def post_game(self, data: object):
+        return self.request("POST", "/api/game", json=data)
 
     def request(self, method: str, endpoint: str, **kwargs):
         url = f"{self.base_url}{endpoint}"
         try:
-            response = requests.request(method, url, headers=self.headers, verify=False, **kwargs)
+            # For cloud API (HTTPS), remove verify=False
+            # For local Docker, you might need verify=False
+            if "localhost" in self.base_url:
+                response = requests.request(method, url, headers=self.headers, verify=False, **kwargs)
+            else:
+                response = requests.request(method, url, headers=self.headers, **kwargs)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
