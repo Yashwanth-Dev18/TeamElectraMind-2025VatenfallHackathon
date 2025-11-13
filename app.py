@@ -19,7 +19,6 @@ def distance(a, b):
     except Exception:
         return 9999  # fallback if format unexpected
 
-
 # -------------------------------------------------------
 # Strategy Section
 # -------------------------------------------------------
@@ -36,66 +35,65 @@ def generate_customer_recommendations(map_obj, current_tick):
     if not charging_nodes:
         return recommendations
 
+    # Process customers sorted by departureTick (earliest first)
+    all_customers = []
     for node in nodes:
-        customers = node.get("customers", [])
-        for cust in customers:
-            # Skip customers who haven't arrived yet
-            departure_tick = cust.get("departureTick", 0)
-            if current_tick >= departure_tick:
-                continue
+        for cust in node.get("customers", []):
+            cust["currentNodeId"] = node["id"]
+            all_customers.append(cust)
 
-            persona = cust.get("persona", "Neutral")
-            charge_remaining = cust.get("chargeRemaining", 0)
-            max_charge = cust.get("maxCharge", 1)
-            soc = charge_remaining / max_charge  # state of charge
-            current_node_id = node["id"]
+    all_customers.sort(key=lambda c: c.get("departureTick", 0))
 
-            # --- Persona-based thresholds ---
-            low_threshold = 0.4 if persona in ["Stressed", "DislikesDriving"] else 0.25
-            full_charge = 1.0 if persona in ["EcoConscious", "CostSensitive"] else 0.8
+    for cust in all_customers:
+        departure_tick = cust.get("departureTick", 0)
+        if current_tick >= departure_tick:
+            continue  # skip already departed customers
 
-            # --- Estimate charging time ---
-            # Assume 0.1 charge per tick as baseline (server may adjust)
-            required_charge = full_charge - soc
-            ticks_left = departure_tick - current_tick
-            min_ticks_needed = max(1, int(required_charge / 0.1))
+        persona = cust.get("persona", "Neutral")
+        charge_remaining = cust.get("chargeRemaining", 0)
+        max_charge = cust.get("maxCharge", 1)
+        soc = charge_remaining / max_charge
+        current_node_id = cust["currentNodeId"]
 
-            # --- Decide if we need to charge now to complete before departure ---
-            if soc < low_threshold or min_ticks_needed >= ticks_left:
-                # Pick nearest green station if persona prefers eco
-                preferred_stations = [
-                    n for n in charging_nodes
-                    if n["target"]["Type"] == "GreenChargingStation"
+        # Persona-based thresholds
+        low_threshold = 0.4 if persona in ["Stressed", "DislikesDriving"] else 0.25
+        full_charge = 1.0 if persona in ["EcoConscious", "CostSensitive"] else 0.8
+
+        # Estimate ticks needed to fully charge
+        required_charge = full_charge - soc
+        ticks_left = departure_tick - current_tick
+        min_ticks_needed = max(1, int(required_charge / 0.1))
+
+        # --- Always ensure enough charge to depart on time ---
+        if soc < low_threshold or min_ticks_needed >= ticks_left:
+            preferred_stations = [
+                n for n in charging_nodes
+                if n["target"]["Type"] == "GreenChargingStation"
+            ]
+            candidates = preferred_stations if preferred_stations else charging_nodes
+            candidates.sort(key=lambda n: distance(current_node_id, n["id"]))
+            target_station = candidates[0]["id"]
+
+            recommendations.append({
+                "customerId": cust["id"],
+                "chargingRecommendations": [
+                    {"nodeId": target_station, "chargeTo": full_charge}
                 ]
-                candidates = preferred_stations if preferred_stations else charging_nodes
-                candidates.sort(key=lambda n: distance(current_node_id, n["id"]))
-                target_station = candidates[0]["id"]
+            })
 
+        # --- Occasional eco top-up for EcoConscious persona ---
+        elif persona == "EcoConscious" and ticks_left > 5 and random.random() < 0.05:
+            green_stations = [n for n in charging_nodes if n["target"]["Type"] == "GreenChargingStation"]
+            if green_stations:
+                target_station = random.choice(green_stations)["id"]
                 recommendations.append({
                     "customerId": cust["id"],
                     "chargingRecommendations": [
-                        {
-                            "nodeId": target_station,
-                            "chargeTo": full_charge
-                        }
+                        {"nodeId": target_station, "chargeTo": 1.0}
                     ]
                 })
 
-            # --- Occasional eco top-up if persona is EcoConscious and has spare ticks ---
-            elif persona == "EcoConscious" and ticks_left > 5 and random.random() < 0.05:
-                green_stations = [n for n in charging_nodes if n["target"]["Type"] == "GreenChargingStation"]
-                if green_stations:
-                    target_station = random.choice(green_stations)["id"]
-                    recommendations.append({
-                        "customerId": cust["id"],
-                        "chargingRecommendations": [
-                            {"nodeId": target_station, "chargeTo": 1.0}
-                        ]
-                    })
-
     return recommendations
-
-
 
 def generate_tick(map_obj, current_tick):
     """Package up a tick for the API."""
@@ -104,11 +102,9 @@ def generate_tick(map_obj, current_tick):
         "customerRecommendations": generate_customer_recommendations(map_obj, current_tick),
     }
 
-
 def should_move_on_to_next_tick(response):
     """Simple policy — always continue."""
     return True
-
 
 # -------------------------------------------------------
 # Main Game Loop
@@ -183,7 +179,6 @@ def main():
                 break
 
     print(f"\n🏁 Final score: {final_score}")
-
 
 if __name__ == "__main__":
     main()
