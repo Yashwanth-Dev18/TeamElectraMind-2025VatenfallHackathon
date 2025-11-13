@@ -4,13 +4,13 @@ class ConsiditionClient:
     def __init__(self, base_url: str, api_key: str):
         self.base_url = base_url
         self.api_key = api_key
-        self.headers = {"x-api-key": self.api_key}
+        self.headers = {"x-api-key": self.api_key} if api_key else {}
     
     def post_game(self, data: object):
         return self.request("POST", "/api/game", json=data)
 
     def get_map(self, map_name: str):
-                return self.request("GET", "/api/map", params={"mapName": map_name})
+        return self.request("GET", "/api/map", params={"mapName": map_name})
 
     def request(self, method: str, endpoint: str, **kwargs):
         url = f"{self.base_url}{endpoint}"
